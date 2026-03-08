@@ -1,0 +1,26 @@
+{
+    "name": "tistory-mcp-server",
+    "version": "1.0.0",
+    "description": "Tistory blog automation MCP server using Playwright browser automation",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "login": "node scripts/manual-login.js"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.0.0",
+        "dotenv": "^16.4.0",
+        "front-matter": "^4.0.2",
+        "marked": "^17.0.4",
+        "playwright": "^1.50.0"
+    },
+    "keywords": [
+        "tistory",
+        "mcp",
+        "playwright",
+        "automation"
+    ],
+    "author": "ASK Steve Korea",
+    "license": "MIT"
+}

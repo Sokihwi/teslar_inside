@@ -1,0 +1,174 @@
+import requests
+from bs4 import BeautifulSoup
+import datetime
+import time
+import os
+
+# Keywords to search
+KEYWORDS = [
+    "테슬라", 
+    "사이버트럭", 
+    "모델3 하이랜드", 
+    "모델Y 주니퍼", 
+    "테슬라 FSD", 
+    "일론 머스크"
+]
+
+OUTPUT_FILE = "tesla_news_digest.html"
+
+def fetch_naver_news(keyword):
+    print(f"Searching Naver News API for: {keyword}")
+    # Using Naver's internal API which powers the infinite scroll/tab loading
+    url = "https://s.search.naver.com/p/newssearch/3/api/tab/more"
+    
+    # params structure observed from debug
+    params = {
+        "query": keyword,
+        "sort": "1", # 0: relevance, 1: date
+        "pd": "1",   # 1: 1 week (can be changed to shorter period if needed)
+        "start": "1",
+        "ssc": "tab.news.all"
+    }
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    
+    try:
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        articles = []
+        html_content = ""
+        
+        # The API returns a 'collection' list, usually the first item has 'html'
+        if 'collection' in data:
+            for item in data['collection']:
+                if 'html' in item:
+                    html_content += item['html']
+        
+        if not html_content:
+            print("  - No HTML content found in API response")
+            return []
+
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        title_elements = soup.select(".sds-comps-text-type-headline1")
+        print(f"  - Found {len(title_elements)} potential articles")
+        
+        for title_el in title_elements:
+            # title_el is a span, parent is 'a'
+            link_tag = title_el.find_parent('a')
+            if not link_tag:
+                continue
+                
+            title = title_el.get_text().strip()
+            link = link_tag['href']
+            
+            # Summary is usually in a sibling div or nearby
+            container = link_tag.find_parent('div') 
+            if not container:
+                description = ""
+            else:
+                desc_el = container.select_one(".sds-comps-text-type-body1")
+                description = desc_el.get_text().strip() if desc_el else ""
+
+            source = "Naver News" 
+            
+            articles.append({
+                "title": title,
+                "link": link,
+                "description": description,
+                "source": source,
+                "keyword": keyword
+            })
+            
+        return articles
+            
+    except Exception as e:
+        print(f"Error fetching news for {keyword}: {e}")
+        return []
+
+def generate_html(articles):
+    # CSS for the email
+    css = """
+    <style>
+        body { font-family: 'Helvetica', 'Arial', sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #e82127; border-bottom: 2px solid #e82127; padding-bottom: 10px; } /* Tesla Red */
+        .article { margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background-color: #fcfcfc; }
+        .article h3 { margin-top: 0; margin-bottom: 5px; }
+        .article h3 a { text-decoration: none; color: #2c3e50; }
+        .article h3 a:hover { color: #e82127; text-decoration: underline; }
+        .meta { font-size: 0.85em; color: #777; margin-bottom: 10px; }
+        .summary { color: #555; }
+        .keyword-tag { background-color: #e9ecef; color: #495057; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 10px; }
+        .footer { margin-top: 40px; font-size: 0.8em; color: #999; text-align: center; }
+    </style>
+    """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Tesla Inside - Daily/Weekly Issue Digest</title>
+        {css}
+    </head>
+    <body>
+        <h1>Tesla Inside - Daily/Weekly Issue Digest</h1>
+        <p>News articles found for keywords: {', '.join(KEYWORDS)}</p>
+        <p>Date: {datetime.date.today().strftime('%Y-%m-%d')}</p>
+        <hr>
+    """
+    
+    if not articles:
+        html += "<p>No recent news found for the specified keywords.</p>"
+    else:
+        for article in articles:
+            html += f"""
+            <div class="article">
+                <h3><a href="{article['link']}" target="_blank">{article['title']}</a></h3>
+                <div class="meta">
+                    <span>{article['source']}</span>
+                    <span class="keyword-tag">#{article['keyword']}</span>
+                </div>
+                <div class="summary">{article['description']}...</div>
+            </div>
+            """
+            
+    html += """
+        <div class="footer">
+            Generated by Antigravity Agent
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html
+
+def main():
+    all_articles = []
+    seen_links = set()
+    
+    print("Starting Tesla News Search...")
+    
+    for keyword in KEYWORDS:
+        results = fetch_naver_news(keyword)
+        for article in results:
+            if article['link'] not in seen_links:
+                seen_links.add(article['link'])
+                all_articles.append(article)
+        time.sleep(1) # Be polite
+        
+    print(f"Total unique articles found: {len(all_articles)}")
+    
+    html_content = generate_html(all_articles)
+    
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write(html_content)
+        
+    print(f"Report generated: {OUTPUT_FILE}")
+
+if __name__ == "__main__":
+    main()
